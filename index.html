@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Personal Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for a better look */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #1f2937; /* gray-800 */
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #4b5563; /* gray-600 */
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #6b7280; /* gray-500 */
+        }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0"
+      }
+    }
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 antialiased">
+    <div id="app-root" class="flex h-screen w-full flex-col"></div>
+
+    <script type="module">
+        import { GoogleGenAI } from "@google/genai";
+
+        // --- ICONS (as functions returning SVG strings) ---
+        const SparklesIcon = (className = "h-6 w-6") => `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.898 20.562L16.25 21.75l-.648-1.188a2.25 2.25 0 01-1.423-1.423L13.5 18.75l1.188-.648a2.25 2.25 0 011.423-1.423L16.25 15l.648 1.188a2.25 2.25 0 011.423 1.423L18.5 18.75l-1.188.648a2.25 2.25 0 01-1.423 1.423z" /></svg>`;
+        const ChatBubbleIcon = (className = "h-5 w-5") => `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>`;
+        const PhotoIcon = (className = "h-5 w-5") => `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>`;
+        const PaperAirplaneIcon = (className = "h-6 w-6") => `<svg class="${className}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>`;
+
+        // --- STATE ---
+        let state = {
+            mode: 'chat', // 'chat' or 'image'
+            messages: [],
+            isLoading: false,
+            apiKey: 'AIzaSyDwt2FxCJZxZr7ag7pqqGFD1K6T-iQcc2s'
+        };
+        let ai = null;
+
+        // --- DOM Elements ---
+        const appRoot = document.getElementById('app-root');
+
+        // --- API SERVICE ---
+        function initializeAi() {
+            if (state.apiKey) {
+                try {
+                    ai = new GoogleGenAI({ apiKey: state.apiKey });
+                    return true;
+                } catch (error) {
+                    console.error("Failed to initialize GoogleGenAI:", error);
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        async function runChat(prompt) {
+            if (!ai) {
+                return "Gemini API could not be initialized. The API key might be invalid or missing.";
+            }
+            try {
+                const response = await ai.models.generateContent({
+                    model: 'gemini-2.5-flash',
+                    contents: [{ parts: [{ text: prompt }] }],
+                });
+                return response.text;
+            } catch (error) {
+                console.error("Gemini API error:", error);
+                return `Sorry, I encountered an error. Please check your API key and network connection. Details: ${error.message}`;
+            }
+        }
+
+        // --- RENDER FUNCTIONS ---
+        function render() {
+            appRoot.innerHTML = `
+                <header class="flex flex-col items-center justify-center border-b border-gray-700/50 p-4 text-center">
+                    <div class="flex items-center gap-3">
+                        ${SparklesIcon("h-8 w-8 text-purple-400")}
+                        <h1 class="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-3xl font-bold text-transparent">
+                            AI Assistant
+                        </h1>
+                    </div>
+                    <p class="mt-2 text-sm text-gray-400">Switch between chat and image generation.</p>
+                    <div class="mt-4">
+                        <div class="flex rounded-full bg-gray-800 p-1">
+                            <button id="toggle-chat" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors duration-300 focus:outline-none">
+                                ${ChatBubbleIcon()} Chat
+                            </button>
+                            <button id="toggle-image" class="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-colors duration-300 focus:outline-none">
+                                ${PhotoIcon()} Image
+                            </button>
+                        </div>
+                    </div>
+                </header>
+                <main id="main-content" class="flex-1 overflow-hidden"></main>
+            `;
+            
+            updateToggleButtons();
+            renderContent();
+            attachEventListeners();
+        }
+
+        function renderContent() {
+            const mainContent = document.getElementById('main-content');
+            if (state.mode === 'chat') {
+                renderChatbot(mainContent);
+            } else {
+                renderImageGenerator(mainContent);
+            }
+        }
+
+        function renderChatbot(container) {
+            container.innerHTML = `
+                <div class="flex h-full flex-col bg-gray-800/50">
+                    <div id="messages-container" class="flex-1 space-y-4 overflow-y-auto p-4 md:p-6 custom-scrollbar">
+                        <!-- Messages will be rendered here -->
+                    </div>
+                    <div class="border-t border-gray-700/50 bg-gray-800/50 p-4">
+                        <form id="chat-form" class="mx-auto flex max-w-2xl items-center gap-3">
+                            <input id="chat-input" type="text" placeholder="Ask me anything..." class="flex-1 rounded-full border-gray-600 bg-gray-700 px-5 py-3 text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500" />
+                            <button id="chat-submit" type="submit" class="flex h-12 w-12 items-center justify-center rounded-full bg-purple-600 text-white transition-colors duration-200 hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-600">
+                                ${PaperAirplaneIcon()}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            renderMessages();
+            document.getElementById('chat-form').addEventListener('submit', handleChatSubmit);
+        }
+
+        function renderMessages() {
+            const messagesContainer = document.getElementById('messages-container');
+            if (!messagesContainer) return;
+            messagesContainer.innerHTML = state.messages.map(msg => `
+                <div class="flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : ''}">
+                    ${msg.role === 'model' ? `<div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-500">${SparklesIcon("h-5 w-5 text-white")}</div>` : ''}
+                    <div class="max-w-md rounded-xl px-4 py-3 text-white shadow-md ${msg.role === 'user' ? 'rounded-br-none bg-indigo-600' : 'rounded-bl-none bg-gray-700'}">
+                        <p class="text-sm leading-relaxed whitespace-pre-wrap">${msg.text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            if (state.isLoading) {
+                messagesContainer.innerHTML += `
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-purple-500">${SparklesIcon("h-5 w-5 text-white")}</div>
+                        <div class="max-w-md rounded-xl rounded-bl-none bg-gray-700 px-4 py-3 shadow-md">
+                            <div class="flex items-center justify-center space-x-1">
+                                <div class="h-2 w-2 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.3s]"></div>
+                                <div class="h-2 w-2 animate-bounce rounded-full bg-gray-300 [animation-delay:-0.15s]"></div>
+                                <div class="h-2 w-2 animate-bounce rounded-full bg-gray-300"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function renderImageGenerator(container) {
+            container.innerHTML = `
+                <div class="flex h-full flex-col bg-gray-800/50 p-4 md:p-6">
+                    <div class="flex flex-1 items-center justify-center rounded-lg border-2 border-dashed border-gray-600 bg-gray-900/50">
+                        <div id="image-display" class="relative h-full w-full max-h-[512px] max-w-[512px] flex items-center justify-center">
+                            <div class="text-center text-gray-500">
+                                ${PhotoIcon("mx-auto h-16 w-16")}
+                                <p class="mt-2">Your generated image will appear here.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex-shrink-0">
+                        <form id="image-form" class="mx-auto flex max-w-2xl items-center gap-3">
+                            <input id="image-prompt" type="text" placeholder="e.g., A futuristic city skyline at sunset" class="flex-1 rounded-full border-gray-600 bg-gray-700 px-5 py-3 text-white placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <button id="image-submit" type="submit" class="rounded-full bg-purple-600 px-6 py-3 font-semibold text-white transition-colors duration-200 hover:bg-purple-700 disabled:cursor-not-allowed disabled:bg-gray-600">
+                                Generate
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('image-form').addEventListener('submit', handleImageSubmit);
+        }
+
+        // --- EVENT HANDLERS & LOGIC ---
+        function attachEventListeners() {
+            document.getElementById('toggle-chat').addEventListener('click', () => setMode('chat'));
+            document.getElementById('toggle-image').addEventListener('click', () => setMode('image'));
+        }
+        
+        function setMode(newMode) {
+            if (state.mode === newMode) return;
+            state.mode = newMode;
+            updateToggleButtons();
+            renderContent();
+        }
+
+        function updateToggleButtons() {
+            const chatBtn = document.getElementById('toggle-chat');
+            const imageBtn = document.getElementById('toggle-image');
+            if (!chatBtn || !imageBtn) return;
+
+            if (state.mode === 'chat') {
+                chatBtn.className = chatBtn.className.replace('text-gray-400 hover:bg-gray-700', 'bg-purple-600 text-white shadow-md');
+                imageBtn.className = imageBtn.className.replace('bg-purple-600 text-white shadow-md', 'text-gray-400 hover:bg-gray-700');
+            } else {
+                imageBtn.className = imageBtn.className.replace('text-gray-400 hover:bg-gray-700', 'bg-purple-600 text-white shadow-md');
+                chatBtn.className = chatBtn.className.replace('bg-purple-600 text-white shadow-md', 'text-gray-400 hover:bg-gray-700');
+            }
+        }
+        
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const submitBtn = document.getElementById('chat-submit');
+            const prompt = input.value.trim();
+
+            if (!prompt || state.isLoading) return;
+            
+            state.messages.push({ role: 'user', text: prompt });
+            input.value = '';
+            state.isLoading = true;
+            submitBtn.disabled = true;
+            renderMessages();
+
+            const responseText = await runChat(prompt);
+            state.messages.push({ role: 'model', text: responseText });
+            state.isLoading = false;
+            submitBtn.disabled = false;
+            renderMessages();
+            input.focus();
+        }
+
+        function handleImageSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById('image-prompt');
+            const submitBtn = document.getElementById('image-submit');
+            const display = document.getElementById('image-display');
+            const prompt = input.value.trim();
+
+            if (!prompt || state.isLoading) return;
+
+            state.isLoading = true;
+            submitBtn.disabled = true;
+            input.disabled = true;
+
+            display.innerHTML = `
+                <div class="flex flex-col items-center justify-center text-gray-400">
+                    <svg class="h-12 w-12 animate-spin text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p class="mt-4 text-lg">Generating your masterpiece...</p>
+                 </div>
+            `;
+            
+            const encodedPrompt = encodeURIComponent(prompt);
+            const url = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true`;
+            const img = new Image();
+            img.src = url;
+
+            img.onload = () => {
+                display.innerHTML = `<img src="${url}" alt="${prompt.replace(/"/g, '&quot;')}" class="h-full w-full rounded-lg object-contain shadow-2xl" />`;
+                state.isLoading = false;
+                submitBtn.disabled = false;
+                input.disabled = false;
+            };
+
+            img.onerror = () => {
+                display.innerHTML = `
+                    <div class="text-center text-gray-500">
+                        ${PhotoIcon("mx-auto h-16 w-16")}
+                        <p class="mt-2">Your generated image will appear here.</p>
+                        <p class="mt-4 text-red-400">Failed to generate image. The service might be down or the prompt was refused.</p>
+                    </div>
+                `;
+                state.isLoading = false;
+                submitBtn.disabled = false;
+                input.disabled = false;
+            };
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            initializeAi();
+            render();
+        }
+        
+        init();
+
+    </script>
+</body>
+</html>
